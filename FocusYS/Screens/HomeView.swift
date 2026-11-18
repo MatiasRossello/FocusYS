@@ -4,13 +4,21 @@
 //
 //  Native home screen: the app name, "Choose a platform" and one large
 //  row per platform, placed toward the bottom so they are reachable with
-//  one hand.
+//  one hand. Rows show block state; long-press a row for quick blocks, or
+//  use the hourglass button to manage blocks.
 //
 
 import SwiftUI
 
 struct HomeView: View {
+    let blocks: BlockStore
+    let now: Date
     let onSelect: (Platform) -> Void
+    /// Opens the Blocks sheet, optionally preset to a platform / custom range.
+    let onShowBlocks: (Platform?, BlockPreset?) -> Void
+
+    @State private var pendingRule: BlockRule?
+    @State private var blockedNotice: (platform: Platform, until: Date)?
 
     var body: some View {
         GeometryReader { proxy in
@@ -25,7 +33,7 @@ struct HomeView: View {
                         .accessibilityAddTraits(.isHeader)
                     VStack(spacing: 12) {
                         ForEach(Platform.allCases) { platform in
-                            PlatformRow(platform: platform) { onSelect(platform) }
+                            row(for: platform)
                         }
                     }
                 }
@@ -38,18 +46,103 @@ struct HomeView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .confirmationDialog(
+            pendingRule.map { "Block \($0.platform.displayName) now?" } ?? "",
+            isPresented: Binding(get: { pendingRule != nil }, set: { if !$0 { pendingRule = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingRule
+        ) { rule in
+            Button("Block until \(rule.end.blockDescription(relativeTo: now))", role: .destructive) {
+                blocks.add(rule)
+                pendingRule = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRule = nil }
+        } message: { _ in
+            Text("It starts right away and can't be turned off until it ends.")
+        }
+        .alert(
+            blockedNotice.map { "\($0.platform.displayName) is blocked" } ?? "",
+            isPresented: Binding(get: { blockedNotice != nil }, set: { if !$0 { blockedNotice = nil } }),
+            presenting: blockedNotice
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { notice in
+            Text("You blocked it until \(notice.until.blockDescription(relativeTo: now)).")
+        }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Focus\(Text("YS").foregroundStyle(Color.accentColor))")
-            .font(.largeTitle.weight(.bold))
-            .accessibilityLabel("FocusYS")
-            .accessibilityAddTraits(.isHeader)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Focus\(Text("YS").foregroundStyle(Color.accentColor))")
+                .font(.largeTitle.weight(.bold))
+                .accessibilityLabel("FocusYS")
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Focus Your Self")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Text("Focus Your Self")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            blocksButton
+        }
+    }
+
+    private var hasBlocks: Bool {
+        !blocks.active(at: now).isEmpty || !blocks.upcoming(at: now).isEmpty
+    }
+
+    private var blocksButton: some View {
+        Button { onShowBlocks(nil, nil) } label: {
+            Image(systemName: hasBlocks ? "hourglass.circle.fill" : "hourglass.circle")
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(hasBlocks ? Color.accentColor : .secondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Blocks")
+        .accessibilityHint("Block a platform for a while or see your blocks")
+    }
+
+    @ViewBuilder
+    private func row(for platform: Platform) -> some View {
+        let until = blocks.blockedUntil(platform, at: now)
+        let upcoming = until == nil ? blocks.nextUpcoming(for: platform, at: now) : nil
+        PlatformRow(platform: platform, blockedUntil: until, upcomingStart: upcoming?.start, now: now) {
+            if let until {
+                blockedNotice = (platform, until)
+            } else {
+                onSelect(platform)
+            }
+        }
+        .contextMenu {
+            if until == nil {
+                Section("Block \(platform.displayName)") {
+                    ForEach([BlockPreset.oneHour, .restOfToday, .tomorrow]) { preset in
+                        Button { quickBlock(platform, preset) } label: {
+                            Label(preset.title, systemImage: preset == .tomorrow ? "calendar" : "hourglass")
+                        }
+                    }
+                    Button { onShowBlocks(platform, .custom) } label: {
+                        Label("Custom…", systemImage: "slider.horizontal.3")
+                    }
+                }
+            } else {
+                Button { onShowBlocks(platform, nil) } label: {
+                    Label("See blocks", systemImage: "lock")
+                }
+            }
+        }
+    }
+
+    private func quickBlock(_ platform: Platform, _ preset: BlockPreset) {
+        guard let interval = preset.interval(from: .now),
+              let rule = try? blocks.validate(platform: platform, start: interval.start, end: interval.end) else { return }
+        if rule.isActive(at: .now) {
+            pendingRule = rule
+        } else {
+            blocks.add(rule)
         }
     }
 }
@@ -58,6 +151,9 @@ struct HomeView: View {
 
 private struct PlatformRow: View {
     let platform: Platform
+    let blockedUntil: Date?
+    let upcomingStart: Date?
+    let now: Date
     let action: () -> Void
 
     @ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 46
@@ -87,14 +183,14 @@ private struct PlatformRow: View {
                     Text(platform.displayName)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(platform.filterSummary)
+                    Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(blockedUntil != nil ? Color.accentColor : .secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !typeSize.isAccessibilitySize {
-                    Image(systemName: "chevron.forward")
+                    Image(systemName: blockedUntil != nil ? "lock.fill" : "chevron.forward")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
@@ -108,13 +204,26 @@ private struct PlatformRow: View {
                     .fill(Color(.secondarySystemGroupedBackground))
             )
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .opacity(blockedUntil != nil ? 0.55 : 1)
         }
         .buttonStyle(PressScaleButtonStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(platform.displayName)
-        .accessibilityValue(platform.filterSummary)
-        .accessibilityHint("Opens \(platform.displayName) inside FocusYS")
+        .accessibilityValue(subtitle)
+        .accessibilityHint(blockedUntil != nil
+                           ? "Blocked. Long press for options."
+                           : "Opens \(platform.displayName) inside FocusYS. Long press to block it.")
         .accessibilityAddTraits(.isButton)
+    }
+
+    private var subtitle: String {
+        if let blockedUntil {
+            return "Blocked until \(blockedUntil.blockDescription(relativeTo: now))"
+        }
+        if let upcomingStart {
+            return "\(platform.filterSummary) · Block from \(upcomingStart.blockDescription(relativeTo: now))"
+        }
+        return platform.filterSummary
     }
 }
 
@@ -165,5 +274,5 @@ struct PressScaleButtonStyle: ButtonStyle {
 }
 
 #Preview {
-    HomeView { _ in }
+    HomeView(blocks: BlockStore(), now: .now, onSelect: { _ in }, onShowBlocks: { _, _ in })
 }

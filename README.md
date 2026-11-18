@@ -8,9 +8,11 @@ App iOS personal que reúne **Instagram**, **YouTube** y **X** en un solo lugar 
 FocusYS/
 ├── FocusYSApp.swift            Punto de entrada
 ├── Platform/Platform.swift     Datos de cada plataforma (URL inicial, dominios, store persistente)
+├── Blocking/BlockStore.swift   Bloqueos por tiempo (guardados en el dispositivo)
 ├── Screens/
 │   ├── RootView.swift          Portada ↔ plataforma, transiciones, Reduce Motion
-│   ├── HomeView.swift          Portada: "Choose a platform" + 3 filas
+│   ├── HomeView.swift          Portada: "Choose a platform" + 3 filas, estado de bloqueo
+│   ├── BlocksView.swift        Hoja "Blocks": nuevo bloqueo, activos y programados
 │   └── PlatformScreen.swift    Pantalla completa, botón Home flotante, error, aviso "… blocked"
 ├── Web/
 │   ├── WebSession.swift        Un WKWebView por plataforma + filtro nativo
@@ -27,6 +29,21 @@ FocusYS/
     ├── youtube-filter.js
     └── x-filter.js
 ```
+
+## Bloquear una red por un tiempo
+
+Para casos como "mañana no quiero usar X":
+
+- **Desde la portada:** mantené presionada una fila y elegí **1 hour**, **Rest of today**, **Tomorrow** o **Custom…**.
+- **Desde el reloj de arena** (arriba a la derecha): elegís la red y el período. **Custom** permite un rango con fecha y hora de inicio y fin.
+
+Comportamiento:
+
+- **Bloqueo activo:** la fila aparece atenuada con un candado y el texto "Blocked until …", y la red no se abre. Si la estás usando cuando empieza el bloqueo, FocusYS pausa el video, vuelve sola a la portada y te avisa.
+- **Compromiso:** un bloqueo que ya empezó no se puede desactivar hasta que termine. Los programados se pueden borrar antes de que empiecen (deslizando a la izquierda en la hoja Blocks). Antes de activar un bloqueo que empieza en el momento, se pide confirmación.
+- **Encadenado:** si dos bloqueos se superponen o van uno detrás del otro, la red queda bloqueada hasta el final del último.
+- **Tope:** cada bloqueo dura como máximo 30 días.
+- **Límite:** esto bloquea las redes dentro de FocusYS. Bloquear las apps oficiales instaladas en el iPhone requiere el permiso de Tiempo de pantalla de Apple (Family Controls), que no está disponible con un Personal Team gratuito. Para esas apps usá **Ajustes › Tiempo de pantalla**.
 
 ## Aspecto de app nativa
 
@@ -75,6 +92,8 @@ La sesión de cada plataforma se guarda en su propio `WKWebsiteDataStore` persis
 - ✅ X (sin cuenta): `/status/<id>/video/1` bloqueado con **Immersive video blocked**.
 - ✅ Modo oscuro, Dynamic Type hasta AX5 (las filas pasan a disposición vertical) y contraste del acento: ≈5,6:1 en claro y ≈8,5:1 en oscuro.
 - ✅ Modo pantalla completa: color de la zona de la hora tomado del sitio, `viewport` con zoom bloqueado (`user-scalable=no`) en YouTube e Instagram, e inicio de YouTube con feed visible y Shorts ocultos.
+- ✅ Bloqueos: lógica probada con un ejecutable de pruebas (encadenado, no se puede borrar uno activo, validación, persistencia, presets "Tomorrow" y "Rest of today").
+- ✅ Bloqueos en el simulador: una red bloqueada no se abre, un bloqueo programado aparece en su fila, y si un bloqueo empieza con la red abierta se vuelve a la portada con el aviso.
 - ⚠️ El gesto desde el borde y el arrastre del botón Home no se pudieron probar en el simulador (sin herramienta de toques); quedan en la lista para el iPhone.
 - ⚠️ VoiceOver no se ejecutó en el simulador. Las etiquetas, pistas, encabezados y anuncios del aviso están en el código.
 
@@ -99,7 +118,9 @@ La sesión de cada plataforma se guarda en su propio `WKWebsiteDataStore` persis
 11. [ ] En cada plataforma: el botón **Home** flotante vuelve a la portada y, al reabrirla, la página sigue donde estaba. Arrastrá el botón a otra posición y comprobá que se queda ahí.
     - Deslizar desde el borde izquierdo va atrás y, al llegar al principio, vuelve a la portada.
     - El pellizco no hace zoom.
-12. [ ] Activar Ajustes › Accesibilidad › Movimiento › **Reducir movimiento** y comprobar que las transiciones pasan a ser un fundido simple.
+12. [ ] Mantener presionada la fila de **X** › **1 hour** › confirmar. Comprobar que X no abre y que en la hoja Blocks no se puede borrar ese bloqueo.
+13. [ ] Programar un bloqueo **Tomorrow** para una red y borrarlo deslizando a la izquierda.
+14. [ ] Activar Ajustes › Accesibilidad › Movimiento › **Reducir movimiento** y comprobar que las transiciones pasan a ser un fundido simple.
 
 Si algo de la lista falla, anotá la URL que muestra la plataforma; con eso se ajusta la regla.
 
@@ -125,5 +146,8 @@ En Xcode › Scheme › Run › Arguments, o con `simctl launch`:
 - `-FocusYSOpen instagram|youtube|x` abre la plataforma al iniciar.
 - `-FocusYSURL <url>` y `-FocusYSURLDelay <s>` cargan una URL, que pasa por el filtro.
 - `-FocusYSHomeAfter <s>` y `-FocusYSReopenAfter <s>` vuelven a Home y reabren la plataforma.
+- `-FocusYSResetBlocks 1` borra todos los bloqueos al iniciar.
+- `-FocusYSDebugBlock "x:<inicio s>:<duración s>"` agrega un bloqueo relativo al arranque.
+- `-FocusYSShowBlocks 1` abre la hoja Blocks.
 
 En Debug, la consola muestra `[FocusYS] nav/url/filter …` con cada navegación y lo que ocultó el filtro. Nada de esto existe en Release.

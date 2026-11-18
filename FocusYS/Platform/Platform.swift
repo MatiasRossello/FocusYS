@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum Platform: String, CaseIterable, Identifiable {
+enum Platform: String, CaseIterable, Identifiable, Codable {
     case instagram
     case youtube
     case x
