@@ -10,6 +10,7 @@
 
 import Foundation
 import Observation
+import SwiftUI
 import UIKit
 import WebKit
 
@@ -32,6 +33,15 @@ final class WebSession: NSObject {
     private(set) var hasContent = false
     /// Current toast message (e.g. "Reel blocked"), cleared automatically.
     private(set) var toast: Toast?
+    /// The page's own background color (falling back to its
+    /// `<meta name="theme-color">`), used behind the status bar and under
+    /// the home indicator so the site reads as one full-screen surface.
+    private(set) var siteThemeColor: UIColor?
+    private(set) var sitePageColor: UIColor?
+
+    var statusBarColor: Color {
+        Color(uiColor: sitePageColor ?? siteThemeColor ?? .systemBackground)
+    }
 
     struct Toast: Equatable, Identifiable {
         let id = UUID()
@@ -79,9 +89,13 @@ final class WebSession: NSObject {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
+        // App-like: no link preview pop-ups on long press.
+        webView.allowsLinkPreview = false
+        // Transparent: the area outside the page (under the home indicator,
+        // around fixed bars) shows the site's own color painted behind.
         webView.isOpaque = false
-        webView.backgroundColor = .systemBackground
-        webView.scrollView.backgroundColor = .systemBackground
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         #if DEBUG
         webView.isInspectable = true
@@ -127,6 +141,12 @@ final class WebSession: NSObject {
             },
             webView.observe(\.canGoBack, options: [.new]) { [weak self] webView, _ in
                 MainActor.assumeIsolated { self?.canGoBack = webView.canGoBack }
+            },
+            webView.observe(\.themeColor, options: [.new]) { [weak self] webView, _ in
+                MainActor.assumeIsolated { self?.siteThemeColor = webView.themeColor }
+            },
+            webView.observe(\.underPageBackgroundColor, options: [.new]) { [weak self] webView, _ in
+                MainActor.assumeIsolated { self?.sitePageColor = webView.underPageBackgroundColor }
             },
             // Fires for same-document (pushState) changes too, which the
             // navigation delegate never sees. Native fallback for SPA routing.
@@ -331,7 +351,8 @@ extension WebSession: WKNavigationDelegate {
               }).slice(0, 12); };
               return JSON.stringify({ url: location.href, installed: !!window.FocusYS,
                 hidden: d('[data-focusys-hidden]'), dimmed: d('[data-focusys-dim]'),
-                shortsLinks: document.querySelectorAll('a[href*="/shorts"]').length });
+                shortsLinks: document.querySelectorAll('a[href*="/shorts"]').length,
+                viewport: (document.querySelector('meta[name=viewport]') || {}).content });
             })()
             """
             let result = try? await self.webView.evaluateJavaScript(js, in: nil, contentWorld: .defaultClient)

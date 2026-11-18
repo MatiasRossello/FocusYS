@@ -11,7 +11,7 @@ FocusYS/
 ├── Screens/
 │   ├── RootView.swift          Portada ↔ plataforma, transiciones, Reduce Motion
 │   ├── HomeView.swift          Portada: "Choose a platform" + 3 filas
-│   └── PlatformScreen.swift    Barra Back · nombre · Home, carga, error, aviso "… blocked"
+│   └── PlatformScreen.swift    Pantalla completa, botón Home flotante, error, aviso "… blocked"
 ├── Web/
 │   ├── WebSession.swift        Un WKWebView por plataforma + filtro nativo
 │   ├── WebSessionStore.swift   Crea la sesión al elegir la plataforma y la mantiene en memoria
@@ -27,6 +27,13 @@ FocusYS/
     ├── youtube-filter.js
     └── x-filter.js
 ```
+
+## Aspecto de app nativa
+
+- Cada red ocupa toda la pantalla, sin barra de navegador. La zona de la hora toma el color de fondo de la página (o su `theme-color`), y abajo la página llega hasta el borde.
+- **Volver:** deslizá desde el borde izquierdo para ir atrás dentro de la red. Si ya no hay historial, el mismo gesto vuelve a la portada de FocusYS.
+- **Botón Home flotante:** un círculo de vidrio con una casita. Se puede arrastrar a cualquier altura y se acomoda al lado más cercano; la posición se recuerda. Mientras carga una página muestra un aro de progreso. Con VoiceOver incluye la acción "Go back".
+- Sin zoom con pellizco ni doble toque, sin vista previa de enlaces al mantener presionado, sin selección de texto fuera de los campos para escribir, sin el resaltado gris al tocar, y sin enlaces a "descargar la app" (App Store, `intent:`).
 
 ## Cómo filtra
 
@@ -67,6 +74,8 @@ La sesión de cada plataforma se guarda en su propio `WKWebsiteDataStore` persis
   - `/watch` reproduce normalmente.
 - ✅ X (sin cuenta): `/status/<id>/video/1` bloqueado con **Immersive video blocked**.
 - ✅ Modo oscuro, Dynamic Type hasta AX5 (las filas pasan a disposición vertical) y contraste del acento: ≈5,6:1 en claro y ≈8,5:1 en oscuro.
+- ✅ Modo pantalla completa: color de la zona de la hora tomado del sitio, `viewport` con zoom bloqueado (`user-scalable=no`) en YouTube e Instagram, e inicio de YouTube con feed visible y Shorts ocultos.
+- ⚠️ El gesto desde el borde y el arrastre del botón Home no se pudieron probar en el simulador (sin herramienta de toques); quedan en la lista para el iPhone.
 - ⚠️ VoiceOver no se ejecutó en el simulador. Las etiquetas, pistas, encabezados y anuncios del aviso están en el código.
 
 ## Requiere sesión real (no comprobable sin cuenta)
@@ -87,7 +96,9 @@ La sesión de cada plataforma se guarda en su propio `WKWebsiteDataStore` persis
 8. [ ] YouTube: buscar algo y confirmar que no aparecen estantes de Shorts. Abrir un video normal, reproducirlo y ver que **Back** vuelve a los resultados.
 9. [ ] YouTube: abrir tus **Suscripciones** y un **canal**, y confirmar que su pestaña Shorts no aparece o queda bloqueada.
 10. [ ] X: reproducir un video dentro de un post del timeline, y tocar el video o "expandir" para ver si aparece **Immersive video blocked**.
-11. [ ] En cada plataforma: **Home** vuelve a la portada y, al reabrirla, la página sigue donde estaba.
+11. [ ] En cada plataforma: el botón **Home** flotante vuelve a la portada y, al reabrirla, la página sigue donde estaba. Arrastrá el botón a otra posición y comprobá que se queda ahí.
+    - Deslizar desde el borde izquierdo va atrás y, al llegar al principio, vuelve a la portada.
+    - El pellizco no hace zoom.
 12. [ ] Activar Ajustes › Accesibilidad › Movimiento › **Reducir movimiento** y comprobar que las transiciones pasan a ser un fundido simple.
 
 Si algo de la lista falla, anotá la URL que muestra la plataforma; con eso se ajusta la regla.

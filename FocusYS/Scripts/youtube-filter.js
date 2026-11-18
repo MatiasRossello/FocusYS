@@ -42,11 +42,22 @@
     "ytd-rich-item-renderer", "ytd-video-renderer", "ytd-grid-video-renderer"
   ].join(",");
 
-  // Tabs / navigation entries.
+  // Tabs / navigation entries (small elements only: e.g. ytm-tab-renderer
+  // is the whole page section on m.youtube.com, not a tab button).
   var TABS = [
     "ytm-pivot-bar-item-renderer", "ytd-guide-entry-renderer", "ytd-mini-guide-entry-renderer",
-    "yt-tab-shape", "ytm-tab-renderer", "tp-yt-paper-tab", "[role='tab']"
+    "yt-tab-shape", "tp-yt-paper-tab", "[role='tab']"
   ].join(",");
+
+  // Safety net: never hide a container that also holds a normal video.
+  function holdsNormalVideo(el, ctx) {
+    var links = el.querySelectorAll("a[href]");
+    for (var i = 0; i < links.length; i++) {
+      var u = ctx.toURL(links[i].getAttribute("href"));
+      if (u && FocusYS.segments(u)[0] === "watch") return true;
+    }
+    return false;
+  }
 
   function isVideoLink(url) {
     var s = FocusYS.segments(url);
@@ -83,8 +94,11 @@
       var url = ctx.toURL(a.getAttribute("href"));
       if (!url || !ctx.reasonForURL(url)) continue;
       var tab = a.closest(TABS);
-      var item = tab ? null : a.closest(ITEMS);
-      ctx.hide(tab || item || a);
+      var item = a.closest(ITEMS);
+      var target = [tab, item].filter(function (el) {
+        return el && !holdsNormalVideo(el, ctx);
+      })[0];
+      ctx.hide(target || a);
       var shelf = a.closest(MIXED_SHELVES);
       if (shelf) shelvesToCheck.add(shelf);
     }

@@ -77,12 +77,37 @@
     }
 
     // ---- CSS ---------------------------------------------------------------
+    // Filter markers, plus "feel like an app, not a browser": no grey tap
+    // flash, no text-selection / callout on long press (inputs keep them),
+    // no double-tap zoom delay.
+    var APP_FEEL =
+      "html{-webkit-tap-highlight-color:transparent!important;-webkit-text-size-adjust:100%;touch-action:manipulation}" +
+      "body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
+      "input,textarea,select,[contenteditable],[contenteditable] *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}" +
+      "a[href^='intent:'],a[href*='apps.apple.com/'],a[href*='itunes.apple.com/']{display:none!important}";
     var style = document.createElement("style");
     style.textContent =
       "[" + HIDDEN + "]{display:none!important}" +
       "[" + DIM + "]{opacity:.35!important;filter:grayscale(1)!important}" +
-      (platform.css || "");
+      APP_FEEL + (platform.css || "");
     (document.head || document.documentElement).appendChild(style);
+
+    // ---- No pinch / double-tap zoom ----------------------------------------
+    // Native apps don't zoom; also stops iOS zooming into small text fields.
+    function lockViewport() {
+      var meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) {
+        if (!document.head) return;
+        meta = document.createElement("meta");
+        meta.name = "viewport";
+        meta.content = "width=device-width, initial-scale=1";
+        document.head.appendChild(meta);
+      }
+      var c = meta.getAttribute("content") || "";
+      if (c.indexOf("user-scalable=no") !== -1) return;
+      c = c.replace(/,?\s*(maximum-scale|user-scalable)=[^,]*/g, "");
+      meta.setAttribute("content", c + ", maximum-scale=1, user-scalable=no");
+    }
 
     // ---- Tap interception (before the site's own handlers) -----------------
     function onActivate(event) {
@@ -128,6 +153,7 @@
 
     function flush() {
       scheduled = false;
+      lockViewport();
       if (location.href !== lastHref) {
         lastHref = location.href;
         fullScanPending = true;
