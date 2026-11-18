@@ -11,7 +11,7 @@ import SwiftUI
 struct FocusYSApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }
